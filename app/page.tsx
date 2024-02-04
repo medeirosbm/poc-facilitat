@@ -1,6 +1,100 @@
 import Image from "next/image";
+import { Document, Packer, Paragraph, TextRun } from "docx";
+//import { FileChild } from "./file-child";
+import * as fs from "fs";
+
+
+function convertToDocument(input: any): Document  {
+
+
+    const content = convertContent(input.content);
+    return new Document({
+      sections: [
+        {
+          properties: {},
+          children: [content],
+        },
+      ],
+    });
+}
+
+
+
+function convertContent(content: any[]): any[] {
+
+  return content.map((input)=>{
+    
+    if (typeof input === "string") {
+      return new TextRun({ text: input });
+    } else if (input.type === "p") {
+      return  new Paragraph({
+        children: convertContent(input.content),
+      });
+    }
+    else if (input.type === "strong") {
+
+      return convertContent(input.content).map((text)=>{text.bold = true;});
+
+    }else if (input.type === "i") {
+
+      return convertContent(input.content).map((text)=>{text.italics = true;});
+
+    }else if (input.type === "u") {
+
+      return convertContent(input.content).map((text)=>{text.underline = true;});
+
+    }else//table
+    {
+
+    }
+  });
+  
+  //return [];
+}
+/*
+function convertContent(content: any[]): TextRun[] {
+  return content.map((item) => {
+    if (typeof item === "string") {
+      return new TextRun({ text: item });
+    } else {
+      return new TextRun({
+        italics: item.type === "i",
+        bold: item.type === "strong",
+        text: convertContent(item.content).map((run) => run.text).join(""),
+      });
+    }
+  });
+}*/
 
 export default function Home() {
+  
+  console.log("oi");
+  
+// Example input JSON
+const inputJSON = {
+  type: "p",
+  content: [
+    {
+      type: "strong",
+      content: [
+        { type: "i", content: ["Lorem"] },
+        " ",
+        { type: "u", content: ["ipsum"] },
+        " dolor",
+      ],
+    },
+    " Maecenas imperdiet sapien lorem. ",
+  ],
+};
+
+// Convert to Document object
+  const doc  = convertToDocument(inputJSON);
+  // Used to export the file into a .docx file
+  Packer.toBuffer(doc).then((buffer) => {
+    fs.writeFileSync("Testing.docx", buffer);
+  });
+
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-24">
       <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
