@@ -6,18 +6,17 @@ import * as fs from "fs";
 
 function convertToDocument(input: any): Document  {
 
-
-    const content = convertContent(input.content);
+    const content = convertContent([input]);
+    //console.log(content);
     return new Document({
       sections: [
         {
           properties: {},
-          children: [content],
+          children: content,
         },
       ],
     });
 }
-
 
 
 function convertContent(content: any[]): any[] {
@@ -27,48 +26,47 @@ function convertContent(content: any[]): any[] {
     if (typeof input === "string") {
       return new TextRun({ text: input });
     } else if (input.type === "p") {
+      const children = convertContent(input.content).flat();
+      console.log(children)
       return  new Paragraph({
-        children: convertContent(input.content),
+        children: children,
       });
     }
     else if (input.type === "strong") {
 
-      return convertContent(input.content).map((text)=>{text.bold = true;});
+      let boldText = convertContent(input.content)
+      boldText = boldText.flat();
+      boldText.forEach((text)=>{text.bold = true;});
+      console.log(boldText)
+      return boldText;
+
 
     }else if (input.type === "i") {
 
-      return convertContent(input.content).map((text)=>{text.italics = true;});
+      let italicsText = convertContent(input.content)
+      italicsText = italicsText.flat();
+      italicsText.forEach((text)=>{text.italics = true;});
+      return italicsText;
+
 
     }else if (input.type === "u") {
 
-      return convertContent(input.content).map((text)=>{text.underline = true;});
+      let underlineText = convertContent(input.content)
+      underlineText = underlineText.flat();
+      underlineText.forEach((text)=>{text.underline = true;});
+      return underlineText
 
     }else//table
     {
-
+      console.log("maybe table tag")
     }
   });
   
-  //return [];
+
 }
-/*
-function convertContent(content: any[]): TextRun[] {
-  return content.map((item) => {
-    if (typeof item === "string") {
-      return new TextRun({ text: item });
-    } else {
-      return new TextRun({
-        italics: item.type === "i",
-        bold: item.type === "strong",
-        text: convertContent(item.content).map((run) => run.text).join(""),
-      });
-    }
-  });
-}*/
 
 export default function Home() {
   
-  console.log("oi");
   
 // Example input JSON
 const inputJSON = {
@@ -88,7 +86,29 @@ const inputJSON = {
 };
 
 // Convert to Document object
-  const doc  = convertToDocument(inputJSON);
+const doc  = convertToDocument(inputJSON);
+/* const doc = new Document({
+  sections: [
+      {
+          properties: {},
+          children: [
+              new Paragraph({
+                  children: [
+                      new TextRun("Hello World"),
+                      new TextRun({
+                          text: "Foo Bar",
+                          bold: true,
+                      }),
+                      new TextRun({
+                          text: "\tGithub is the best",
+                          bold: true,
+                      }),
+                  ],
+              }),
+          ],
+      },
+  ],
+});*/
   // Used to export the file into a .docx file
   Packer.toBuffer(doc).then((buffer) => {
     fs.writeFileSync("Testing.docx", buffer);
