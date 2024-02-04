@@ -3,19 +3,63 @@ import { Document, Packer, Paragraph, TextRun } from "docx";
 //import { FileChild } from "./file-child";
 import * as fs from "fs";
 
+class TextRunCOMP {
+  italics: boolean;
+  bold: boolean;
+  text: string;
+  underline: object |null;
 
-function convertToDocument(input: any): Document  {
+  constructor(options: { italics?: boolean; bold?: boolean; text: string, underline?: object}) {
+    this.italics = options.italics || false;
+    this.bold = options.bold || false;
+    this.text = options.text;
+    this.underline = options.underline || null;
+  }
+
+   build = (): TextRun =>{
+    if(this.underline)
+      return new TextRun({ text: this.text, italics: this.italics, bold:this.bold,underline: this.underline });
+    else
+      return new TextRun({ text: this.text, italics: this.italics, bold:this.bold });
+  }
+}
+
+class ParagraphCOMP {
+  children: TextRunCOMP[];
+
+  constructor(options: { children: TextRunCOMP[] }) {
+    this.children = options.children;
+  }
+  build = (): Paragraph =>{
+    return new Paragraph({ children: this.children.map(child=>{return child.build()}) });
+  }
+}
+
+class DocumentCOMP {
+  properties: {};
+  children: ParagraphCOMP[];
+  constructor(options: { properties: {}; children: ParagraphCOMP[] }) {
+    this.properties = options.properties;
+    this.children = options.children;
+  }
+
+  build = (): Document =>{
+    return new Document({ sections:[{
+        properties:{}, children: this.children.map(child=>{return child.build()}) 
+      }]
+    });
+  }
+
+}
+function convertToDocumentCOMP(input: any): DocumentCOMP  {
 
     const content = convertContent([input]);
-    //console.log(content);
-    return new Document({
-      sections: [
+    return new DocumentCOMP(
         {
           properties: {},
           children: content,
         },
-      ],
-    });
+    );
 }
 
 
@@ -24,11 +68,10 @@ function convertContent(content: any[]): any[] {
   return content.map((input)=>{
     
     if (typeof input === "string") {
-      return new TextRun({ text: input });
+      return new TextRunCOMP({ text: input });
     } else if (input.type === "p") {
       const children = convertContent(input.content).flat();
-      console.log(children)
-      return  new Paragraph({
+      return  new ParagraphCOMP({
         children: children,
       });
     }
@@ -36,8 +79,10 @@ function convertContent(content: any[]): any[] {
 
       let boldText = convertContent(input.content)
       boldText = boldText.flat();
-      boldText.forEach((text)=>{text.bold = true;});
-      console.log(boldText)
+      boldText = boldText.map((textRun)=>{
+        textRun.bold = true;
+        return textRun;
+      });
       return boldText;
 
 
@@ -45,7 +90,11 @@ function convertContent(content: any[]): any[] {
 
       let italicsText = convertContent(input.content)
       italicsText = italicsText.flat();
-      italicsText.forEach((text)=>{text.italics = true;});
+
+      italicsText = italicsText.map((textRun)=>{
+        textRun.italics = true;
+        return textRun;
+      });
       return italicsText;
 
 
@@ -53,7 +102,10 @@ function convertContent(content: any[]): any[] {
 
       let underlineText = convertContent(input.content)
       underlineText = underlineText.flat();
-      underlineText.forEach((text)=>{text.underline = true;});
+      underlineText = underlineText.map((textRun)=>{
+        textRun.underline = {};
+        return textRun;
+      });
       return underlineText
 
     }else//table
@@ -62,11 +114,9 @@ function convertContent(content: any[]): any[] {
     }
   });
   
-
 }
 
 export default function Home() {
-  
   
 // Example input JSON
 const inputJSON = {
@@ -86,7 +136,9 @@ const inputJSON = {
 };
 
 // Convert to Document object
-const doc  = convertToDocument(inputJSON);
+const docCOMP  = convertToDocumentCOMP(inputJSON);
+const doc = docCOMP.build();
+//console.log(doc)
 /* const doc = new Document({
   sections: [
       {
