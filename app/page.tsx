@@ -1,7 +1,9 @@
 import Image from "next/image";
-import { Document, Packer, Paragraph, TextRun } from "docx";
+import { Document, Packer, Paragraph, TextRun , Table, TableRow, TableCell} from "docx";
 //import { FileChild } from "./file-child";
 import * as fs from "fs";
+import { JSONToHTML } from 'html-to-json-parser'; // ES6
+import internal from "stream";
 
 class TextRunCOMP {
   italics: boolean;
@@ -32,6 +34,41 @@ class ParagraphCOMP {
   }
   build = (): Paragraph =>{
     return new Paragraph({ children: this.children.map(child=>{return child.build()}) });
+  }
+}
+
+class TableCOMP {
+  rows: TableRowCOMP[];
+
+  constructor(options: { rows: TableRowCOMP[] }) {
+    this.rows = options.rows;
+  }
+  build = (): Table =>{
+    return new Table({ rows: this.rows.map(child=>{return child.build()}) });
+  }
+}
+class TableRowCOMP {
+  children: TableCellCOMP[];
+
+  constructor(options: { children: TableCellCOMP[] }) {
+    this.children = options.children;
+  }
+  build = (): TableRow =>{
+    return new TableRow({ children: this.children.map(child=>{return child.build()}) });
+  }
+}
+
+class TableCellCOMP {
+  children: (ParagraphCOMP | TableCOMP)[];
+  columnSpan?: number;
+  rowSpan?: number;
+  //pct
+  width?: string;
+  constructor(options: { children: (ParagraphCOMP | TableCOMP)[] }) {
+    this.children = options.children;
+  }
+  build = (): TableCell =>{
+    return new TableCell({ children: this.children.map(child=>{return child.build()}) });
   }
 }
 
@@ -84,8 +121,6 @@ function convertContent(content: any[]): any[] {
         return textRun;
       });
       return boldText;
-
-
     }else if (input.type === "i") {
 
       let italicsText = convertContent(input.content)
@@ -96,8 +131,6 @@ function convertContent(content: any[]): any[] {
         return textRun;
       });
       return italicsText;
-
-
     }else if (input.type === "u") {
 
       let underlineText = convertContent(input.content)
@@ -108,7 +141,43 @@ function convertContent(content: any[]): any[] {
       });
       return underlineText
 
-    }else//table
+    }
+    else  if (input.type === "table") {
+      const rows = convertContent(input.content).flat();
+      return  new TableCOMP({
+        rows: rows,
+      });
+    }else if (input.type === "tr") {
+        const children = convertContent(input.content).flat();
+        return  new TableRowCOMP({
+          children: children,
+        });
+    }else if (input.type === "td") {
+
+
+      const children = convertContent(input.content).flat();
+     
+      const result =  new TableCellCOMP({
+        children: children,
+      });
+
+      // verify the style
+      if(input.content.attributes && input.content.attributes.style){
+        if(input.content.attributes.style.indexOf("width: ")){
+          //"attributes": { "style": "width: 14.2857%;" }
+          const value = input.content.attributes.style.substr(input.content.attributes.style.indexOf("width: ")+ 7,input.content.attributes.style.indexOf("%"));
+          result.width = value;
+        }
+      }
+      if(input.content.attributes && input.content.attributes.rowspan){
+        result.rowSpan = input.content.attributes.rowspan;
+      }
+      if(input.content.attributes && input.content.attributes.colspan){
+        result.rowSpan = input.content.attributes.colspan;
+      }
+
+      return result;
+    }else
     {
       console.log("maybe table tag")
     }
@@ -135,8 +204,150 @@ const inputJSON = {
   ],
 };
 
+const inputJSON2 = 
+{
+  "type": "table",
+  "content": [
+    {
+      "type": "tbody",
+      "content": [
+        "\n",
+        {
+          "type": "tr",
+          "content": [
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 28.5714%;", "colspan": "2" }
+            },
+            "\n\t\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 12.2503%;" }
+            },
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": {
+                "style": "width: 16.3512%; border-color: rgb(204, 0, 0);"
+              }
+            },
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" }
+            },
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" }
+            },
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.3007%;", "rowspan": "2" }
+            }
+          ]
+        },
+        "\n",
+        {
+          "type": "tr",
+          "content": [
+            "\n\t",
+            {
+              "type": "td",
+              "content": [
+                {
+                  "type": "a",
+                  "content": ["Google"],
+                  "attributes": {
+                    "href": "https://www.google.com",
+                    "target": "_blank"
+                  }
+                },
+                { "type": "br" }
+              ],
+              "attributes": { "style": "width: 14.2857%;" }
+            },
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" }
+            },
+            "\n\t",
+            { "type": "td", "content": [{ "type": "br" }] },
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "border-color: rgb(204, 0, 0);" }
+            },
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" }
+            },
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" }
+            },
+            "\n\t"
+          ]
+        },
+        "\n",
+        {
+          "type": "tr",
+          "content": [
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" }
+            },
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" }
+            },
+            "\n\t",
+            { "type": "td", "content": [{ "type": "br" }] },
+            "\n\t",
+            { "type": "td", "content": [{ "type": "br" }] },
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" }
+            },
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" }
+            },
+            "\n\t",
+            { "type": "td", "content": [{ "type": "br" }] }
+          ]
+        }
+      ]
+    }
+  ],
+  "attributes": { "style": "border-collapse:collapse;width: 100%;" }
+};
+
 // Convert to Document object
-const docCOMP  = convertToDocumentCOMP(inputJSON);
+const docCOMP  = convertToDocumentCOMP(inputJSON2);
 const doc = docCOMP.build();
 //console.log(doc)
 /* const doc = new Document({
@@ -161,6 +372,11 @@ const doc = docCOMP.build();
       },
   ],
 });*/
+
+/*
+{"type":"table","content":[{"type":"tbody","content":[{"type":"tr","content":[{"type":"td","content":["a"],"attributes":{"style":"width: 20%; background-color: rgb(255, 153, 0);"}},{"type":"td","content":["a"],"attributes":{"style":"width: 20%; background-color: rgb(255, 153, 0);"}},{"type":"td","content":["a"],"attributes":{"style":"width: 20%; background-color: rgb(255, 153, 0);"}},{"type":"td","content":["a"],"attributes":{"style":"width: 20%; background-color: rgb(255, 153, 0);"}},{"type":"td","content":["a"],"attributes":{"style":"width: 20%; background-color: rgb(255, 153, 0);"}}]},{"type":"tr","content":[{"type":"td","content":["a"],"attributes":{"style":"width: 20%;"}},{"type":"td","content":["a"],"attributes":{"style":"width: 20%;"}},{"type":"td","content":["a"],"attributes":{"style":"width: 20%;"}},{"type":"td","content":["a"],"attributes":{"style":"width: 20%;"}},{"type":"td","content":["a"],"attributes":{"style":"width: 20%;"}}]},{"type":"tr","content":[{"type":"td","content":["a"],"attributes":{"style":"width: 20%;"}},{"type":"td","content":["a"],"attributes":{"style":"width: 20%;"}},{"type":"td","content":["a"],"attributes":{"style":"width: 20%;"}},{"type":"td","content":["a"],"attributes":{"style":"width: 20%;"}},{"type":"td","content":["a"],"attributes":{"style":"width: 20%;"}}]}]}],"attributes":{"style":"border-collapse:collapse;width: 100%;"}}
+
+*/
   // Used to export the file into a .docx file
   Packer.toBuffer(doc).then((buffer) => {
     fs.writeFileSync("Testing.docx", buffer);
