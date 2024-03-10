@@ -1,8 +1,8 @@
 import Image from "next/image";
-import { Document, Packer, Paragraph, TextRun , Table, TableRow, TableCell} from "docx";
+import { Document, Packer, Paragraph, TextRun ,ExternalHyperlink, Table, TableRow, TableCell} from "docx";
 //import { FileChild } from "./file-child";
 import * as fs from "fs";
-import { JSONToHTML } from 'html-to-json-parser'; // ES6
+//import { JSONToHTML } from 'html-to-json-parser'; // ES6
 import internal from "stream";
 
 class TextRunCOMP {
@@ -26,10 +26,37 @@ class TextRunCOMP {
   }
 }
 
-class ParagraphCOMP {
-  children: TextRunCOMP[];
+class HyperlinkCOMP {
+  link: string;
+  style: string;
+  text: string;
 
-  constructor(options: { children: TextRunCOMP[] }) {
+
+  constructor(options: { link?: string; text: string, style?: string}) {
+    this.link = options.link || '';
+    this.style = options.style || "Hyperlink";
+    this.text = options.text;
+
+  }
+
+   build = (): ExternalHyperlink =>{
+
+      return new ExternalHyperlink({
+        children: [
+            new TextRun({
+                text: this.text,
+                style: this.style,
+            }),
+        ],
+        link: this.link,
+    })
+  }
+}
+
+
+class ParagraphCOMP {
+  children: (TextRunCOMP|HyperlinkCOMP)[];
+  constructor(options: { children: (TextRunCOMP|HyperlinkCOMP)[] }) {
     this.children = options.children;
   }
   build = (): Paragraph =>{
@@ -54,39 +81,69 @@ class TableRowCOMP {
     this.children = options.children;
   }
   build = (): TableRow =>{
+    //console.log("children TableRow")
+    //console.log(this.children)
     return new TableRow({ children: this.children.map(child=>{return child.build()}) });
   }
 }
 
 class TableCellCOMP {
   children: (ParagraphCOMP | TableCOMP)[];
-  columnSpan?: number;
-  rowSpan?: number;
+  rowspan?: number;
+  colspan?: number;
   //pct
-  width?: string;
+  width: number;
   constructor(options: { children: (ParagraphCOMP | TableCOMP)[] }) {
     this.children = options.children;
+    this.width = -1;
   }
+
   build = (): TableCell =>{
-    return new TableCell({ children: this.children.map(child=>{return child.build()}) });
+    //console.log("TableCell")
+    //console.log(this)
+    if(this.width != -1){
+    return new TableCell({ 
+      rowSpan: this.rowspan,
+      columnSpan: this.colspan,
+      width:{size: this.width, type: 'pct'},
+      children: this.children.map(child=>{
+        //console.log("child")
+        //console.log(child)
+        const childBuilded = child.build();
+        //console.log("childBuilded")
+        //console.log(childBuilded)
+      return childBuilded}) });
+    }
+    else
+      return new TableCell({ 
+        rowSpan: this.rowspan,
+        columnSpan: this.colspan,
+
+        children: this.children.map(child=>{
+          //console.log("child")
+          //console.log(child)
+          const childBuilded = child.build();
+          //console.log("childBuilded")
+          //console.log(childBuilded)
+        return childBuilded}) });
   }
 }
 
 class DocumentCOMP {
   properties: {};
-  children: ParagraphCOMP[];
-  constructor(options: { properties: {}; children: ParagraphCOMP[] }) {
+  children: (ParagraphCOMP| TableCOMP)[];
+  constructor(options: { properties: {}; children: (ParagraphCOMP| TableCOMP)[] }) {
     this.properties = options.properties;
     this.children = options.children;
   }
 
-  build = (): Document =>{
+  build = (): Document =>{    
     return new Document({ sections:[{
-        properties:{}, children: this.children.map(child=>{return child.build()}) 
+        properties:{}, children: this.children.map(child=>{
+          return child.build()}) 
       }]
     });
   }
-
 }
 function convertToDocumentCOMP(input: any): DocumentCOMP  {
 
@@ -99,9 +156,7 @@ function convertToDocumentCOMP(input: any): DocumentCOMP  {
     );
 }
 
-
 function convertContent(content: any[]): any[] {
-
   return content.map((input)=>{
     
     if (typeof input === "string") {
@@ -140,53 +195,93 @@ function convertContent(content: any[]): any[] {
         return textRun;
       });
       return underlineText
-
     }
     else  if (input.type === "table") {
-      const rows = convertContent(input.content).flat();
+      //console.log("table")
+      //console.log(input.content)
+      //tbody
+      let rows = convertContent(input.content[0].content);
+      rows = rows.flat();
+      const onlyRows = rows.filter(child=>{
+        //console.log()
+        return child  instanceof TableRowCOMP
+      })
+      //c
+      //console.log("rows")
+      //console.log(rows)
       return  new TableCOMP({
-        rows: rows,
+        rows: onlyRows,
       });
     }else if (input.type === "tr") {
-        const children = convertContent(input.content).flat();
+      
+        let children = convertContent(input.content);
+        children = children.flat();
+        //console.log("quantidade total: " + children.length)
+        const onlyCells = children.filter(child=>{
+          //console.log()
+          return child  instanceof TableCellCOMP
+        })
+        //console.log("onlyCells")
+        //console.log(onlyCells)
         return  new TableRowCOMP({
-          children: children,
+          children: onlyCells,
         });
     }else if (input.type === "td") {
 
+      
+      let children = convertContent(input.content);
+      //if(children == undefined)
+      //  children = [];
 
-      const children = convertContent(input.content).flat();
-     
-      const result =  new TableCellCOMP({
+      children = children.flat();
+
+      let result =  new TableCellCOMP({
         children: children,
       });
 
       // verify the style
-      if(input.content.attributes && input.content.attributes.style){
-        if(input.content.attributes.style.indexOf("width: ")){
-          //"attributes": { "style": "width: 14.2857%;" }
-          const value = input.content.attributes.style.substr(input.content.attributes.style.indexOf("width: ")+ 7,input.content.attributes.style.indexOf("%"));
+      /*console.log("input.attributes.style")
+      if(input.attributes !== undefined && input.attributes.style !== undefined)
+        console.log(input.attributes.style)
+      else
+        console.log(false)*/
+
+      if(input.attributes !== undefined && input.attributes.style !== undefined){
+        if(input.attributes.style.indexOf("width: ") > -1){
+          const value = input.attributes.style.substring(input.attributes.style.indexOf("width: ")+ 7,input.attributes.style.indexOf("%"));
           result.width = value;
         }
       }
-      if(input.content.attributes && input.content.attributes.rowspan){
-        result.rowSpan = input.content.attributes.rowspan;
+      if(input.attributes !== undefined && input.attributes.rowspan !== undefined){
+        result.rowspan = input.attributes.rowspan;
       }
-      if(input.content.attributes && input.content.attributes.colspan){
-        result.rowSpan = input.content.attributes.colspan;
+      if(input.attributes !== undefined && input.attributes.colspan !== undefined){
+        result.colspan = input.attributes.colspan;
       }
-
+      //falta colocar a recursão para preencher o content
+      //console.log(result)
       return result;
+    }else if (input.type === "br") {
+
+      return  new ParagraphCOMP({
+        children: [],
+      });
+    }else if (input.type === "a") {
+
+      
+      return new ParagraphCOMP({
+        children: [ new HyperlinkCOMP({link : input.content.Hyperlink, text : input.content}) ]});
+
     }else
     {
-      console.log("maybe table tag")
+      //console.log("maybe table tag" )
+      //console.log(input)
+      //temp
+      return new TextRunCOMP({ text: "default" });
     }
   });
-  
 }
-
 export default function Home() {
-  
 // Example input JSON
 const inputJSON = {
   type: "p",
@@ -203,7 +298,6 @@ const inputJSON = {
     " Maecenas imperdiet sapien lorem. ",
   ],
 };
-
 const inputJSON2 = 
 {
   "type": "table",
@@ -345,9 +439,118 @@ const inputJSON2 =
   ],
   "attributes": { "style": "border-collapse:collapse;width: 100%;" }
 };
+const inputJSON3 = 
+{
+  "type": "table",
+  "content": [
+    {
+      "type": "tbody",
+      "content": [
+        "\n",
+        {
+          "type": "tr",
+          "content": [
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" ,"rowspan": "2" }
+            },
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" }
+            },
+            "\n\t",
+            { "type": "td", "content": [{ "type": "br" }],"attributes": { "style": "width: 14.2857%;" } },
+            "\n\t",
+            { "type": "td", "content": [{ "type": "br" }],"attributes": { "style": "width: 14.2857%;" } },
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" }
+            },
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" }
+            },
+            "\n\t",
+            { "type": "td", "content": [{ "type": "br" }],"attributes": { "style": "width: 14.2857%;" } }
+          ]
+        },
+        "\n",
+        {
+          "type": "tr",
+          "content": [
 
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" }
+            },
+            "\n\t",
+            { "type": "td", "content": [{ "type": "br" }],"attributes": { "style": "width: 14.2857%;" } },
+            "\n\t",
+            { "type": "td", "content": [{ "type": "br" }],"attributes": { "style": "width: 14.2857%;" } },
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" }
+            },
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" }
+            },
+            "\n\t",
+            { "type": "td", "content": [{ "type": "br" }],"attributes": { "style": "width: 14.2857%;" } }
+          ]
+        },
+        "\n",
+        {
+          "type": "tr",
+          "content": [
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" , "colspan": "2"}
+            },
+            "\n\t",
+            { "type": "td", "content": [{ "type": "br" }],"attributes": { "style": "width: 14.2857%;" } },
+            "\n\t",
+            { "type": "td", "content": [{ "type": "br" }],"attributes": { "style": "width: 14.2857%;" } },
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" }
+            },
+            "\n\t",
+            {
+              "type": "td",
+              "content": [{ "type": "br" }],
+              "attributes": { "style": "width: 14.2857%;" }
+            },
+            "\n\t",
+            { "type": "td", "content": [{ "type": "br" }],"attributes": { "style": "width: 14.2857%;" } }
+          ]
+        }
+      ]
+    }
+  ],
+  "attributes": { "style": "border-collapse:collapse;width: 100%;" }
+};
 // Convert to Document object
-const docCOMP  = convertToDocumentCOMP(inputJSON2);
+const docCOMP  = convertToDocumentCOMP(inputJSON3);
+//console.log(docCOMP)
 const doc = docCOMP.build();
 //console.log(doc)
 /* const doc = new Document({
@@ -378,8 +581,9 @@ const doc = docCOMP.build();
 
 */
   // Used to export the file into a .docx file
-  Packer.toBuffer(doc).then((buffer) => {
-    fs.writeFileSync("Testing.docx", buffer);
+  console.log("Used to export the file into a .docx file")
+ Packer.toBuffer(doc).then((buffer) => {
+    fs.writeFileSync("Testing_2.docx", buffer);
   });
 
 
