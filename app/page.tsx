@@ -453,7 +453,17 @@ const inputJSON3 =
             "\n\t",
             {
               "type": "td",
-              "content": [{ "type": "br" }],
+              "content": [
+                {
+                  "type": "a",
+                  "content": ["Google"],
+                  "attributes": {
+                    "href": "https://www.google.com",
+                    "target": "_blank"
+                  }
+                },
+                { "type": "br" }
+              ],
               "attributes": { "style": "width: 14.2857%;" ,"rowspan": "2" }
             },
             "\n\t",
