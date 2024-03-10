@@ -53,7 +53,6 @@ class HyperlinkCOMP {
   }
 }
 
-
 class ParagraphCOMP {
   children: (TextRunCOMP|HyperlinkCOMP)[];
   constructor(options: { children: (TextRunCOMP|HyperlinkCOMP)[] }) {
@@ -81,8 +80,7 @@ class TableRowCOMP {
     this.children = options.children;
   }
   build = (): TableRow =>{
-    //console.log("children TableRow")
-    //console.log(this.children)
+
     return new TableRow({ children: this.children.map(child=>{return child.build()}) });
   }
 }
@@ -99,19 +97,16 @@ class TableCellCOMP {
   }
 
   build = (): TableCell =>{
-    //console.log("TableCell")
-    //console.log(this)
+
     if(this.width != -1){
     return new TableCell({ 
       rowSpan: this.rowspan,
       columnSpan: this.colspan,
       width:{size: this.width, type: 'pct'},
       children: this.children.map(child=>{
-        //console.log("child")
-        //console.log(child)
+
         const childBuilded = child.build();
-        //console.log("childBuilded")
-        //console.log(childBuilded)
+
       return childBuilded}) });
     }
     else
@@ -120,11 +115,8 @@ class TableCellCOMP {
         columnSpan: this.colspan,
 
         children: this.children.map(child=>{
-          //console.log("child")
-          //console.log(child)
           const childBuilded = child.build();
-          //console.log("childBuilded")
-          //console.log(childBuilded)
+
         return childBuilded}) });
   }
 }
@@ -197,18 +189,13 @@ function convertContent(content: any[]): any[] {
       return underlineText
     }
     else  if (input.type === "table") {
-      //console.log("table")
-      //console.log(input.content)
       //tbody
       let rows = convertContent(input.content[0].content);
       rows = rows.flat();
       const onlyRows = rows.filter(child=>{
-        //console.log()
         return child  instanceof TableRowCOMP
       })
-      //c
-      //console.log("rows")
-      //console.log(rows)
+
       return  new TableCOMP({
         rows: onlyRows,
       });
@@ -216,13 +203,11 @@ function convertContent(content: any[]): any[] {
       
         let children = convertContent(input.content);
         children = children.flat();
-        //console.log("quantidade total: " + children.length)
         const onlyCells = children.filter(child=>{
-          //console.log()
+
           return child  instanceof TableCellCOMP
         })
-        //console.log("onlyCells")
-        //console.log(onlyCells)
+
         return  new TableRowCOMP({
           children: onlyCells,
         });
@@ -230,21 +215,12 @@ function convertContent(content: any[]): any[] {
 
       
       let children = convertContent(input.content);
-      //if(children == undefined)
-      //  children = [];
 
       children = children.flat();
 
       let result =  new TableCellCOMP({
         children: children,
       });
-
-      // verify the style
-      /*console.log("input.attributes.style")
-      if(input.attributes !== undefined && input.attributes.style !== undefined)
-        console.log(input.attributes.style)
-      else
-        console.log(false)*/
 
       if(input.attributes !== undefined && input.attributes.style !== undefined){
         if(input.attributes.style.indexOf("width: ") > -1){
@@ -259,7 +235,6 @@ function convertContent(content: any[]): any[] {
         result.colspan = input.attributes.colspan;
       }
       //falta colocar a recursão para preencher o content
-      //console.log(result)
       return result;
     }else if (input.type === "br") {
 
@@ -268,15 +243,11 @@ function convertContent(content: any[]): any[] {
       });
     }else if (input.type === "a") {
 
-      
       return new ParagraphCOMP({
-        children: [ new HyperlinkCOMP({link : input.content.Hyperlink, text : input.content}) ]});
+        children: [ new HyperlinkCOMP({link : input.attributes.href, text : input.content[0]}) ]});
 
     }else
     {
-      //console.log("maybe table tag" )
-      //console.log(input)
-      //temp
       return new TextRunCOMP({ text: "default" });
     }
   });
@@ -560,9 +531,8 @@ const inputJSON3 =
 };
 // Convert to Document object
 const docCOMP  = convertToDocumentCOMP(inputJSON3);
-//console.log(docCOMP)
 const doc = docCOMP.build();
-//console.log(doc)
+
 /* const doc = new Document({
   sections: [
       {
